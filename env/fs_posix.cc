@@ -49,6 +49,9 @@
 
 #include "env/composite_env_wrapper.h"
 #include "env/io_posix.h"
+#ifdef ROCKSDB_RICOCHET
+#include "env/ricochet_mmap.h"
+#endif
 #include "monitoring/iostats_context_imp.h"
 #include "monitoring/thread_status_updater.h"
 #include "options/db_options.h"
@@ -245,15 +248,26 @@ class PosixFileSystem : public FileSystem {
       IOOptions opts;
       s = GetFileSizeOnOpenedFile(fd, fname, &size);
       if (s.ok()) {
-        void* base = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
-        if (base != MAP_FAILED) {
-          TsanAnnotateMappedMemory(base, static_cast<size_t>(size));
+#ifdef ROCKSDB_RICOCHET
+        if (RicochetMmapManager::Get() != nullptr) {
+          // Ricochet mode: pass nullptr so the constructor calls region_init
+          // instead of using a file-backed mmap.
           result->reset(
-              new PosixMmapReadableFile(fd, fname, base, size, options));
+              new PosixMmapReadableFile(fd, fname, nullptr, size, options));
         } else {
-          s = IOError("while mmap file for read", fname, errno);
-          close(fd);
+#endif
+          void* base = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
+          if (base != MAP_FAILED) {
+            TsanAnnotateMappedMemory(base, static_cast<size_t>(size));
+            result->reset(
+                new PosixMmapReadableFile(fd, fname, base, size, options));
+          } else {
+            s = IOError("while mmap file for read", fname, errno);
+            close(fd);
+          }
+#ifdef ROCKSDB_RICOCHET
         }
+#endif
       } else {
         close(fd);
       }

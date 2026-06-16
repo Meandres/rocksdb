@@ -1699,6 +1699,33 @@ if(WITH_BENCHMARK_TOOLS)
     tools/db_bench_tool.cc)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${THIRDPARTY_LIBS})
+  # Ricochet UFFD backend: enabled when RICOCHET_LIB (host) or M5_LIB (gem5) is set.
+  # Host build: cmake -DRICOCHET_LIB=1 [-DRICOCHET_INCLUDE=/path/to/ricochet_lib]
+  if(RICOCHET_LIB OR M5_LIB)
+    if(NOT RICOCHET_INCLUDE)
+      set(RICOCHET_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/../../ricochet_lib")
+    endif()
+    foreach(_t rocksdb db_bench${ARTIFACT_SUFFIX})
+      target_compile_definitions(${_t} PRIVATE ROCKSDB_RICOCHET)
+      target_include_directories(${_t} PRIVATE ${RICOCHET_INCLUDE})
+    endforeach()
+    if(RICOCHET_STATIC)
+      target_link_libraries(rocksdb INTERFACE ${RICOCHET_STATIC})
+    elseif(RICOCHET_LIB)
+      # Auto-detect host library built with `make host` in ricochet_lib/.
+      set(_host_lib "${RICOCHET_INCLUDE}/libricochet_host.a")
+      if(EXISTS "${_host_lib}")
+        target_link_libraries(rocksdb INTERFACE "${_host_lib}")
+      endif()
+    endif()
+  endif()
+  # gem5 m5ops + UPF: only when M5_LIB is set.
+  if(M5_LIB)
+    target_compile_definitions(db_bench${ARTIFACT_SUFFIX} PRIVATE ROCKSDB_GEM5)
+    target_link_libraries(db_bench${ARTIFACT_SUFFIX} ${M5_LIB})
+    target_include_directories(db_bench${ARTIFACT_SUFFIX} PRIVATE
+      ${M5_INCLUDE} ${GEM5_INCLUDE})
+  endif()
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}
     cache/cache_bench.cc

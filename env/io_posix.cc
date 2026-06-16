@@ -9,6 +9,7 @@
 
 #ifdef ROCKSDB_LIB_IO_POSIX
 #include "env/io_posix.h"
+#include "env/ricochet_mmap.h"
 
 #include <fcntl.h>
 
@@ -1198,14 +1199,43 @@ PosixMmapReadableFile::PosixMmapReadableFile(const int fd,
   fd_ = fd_ + 0;  // suppress the warning for used variables
   assert(options.use_mmap_reads);
   assert(!options.use_direct_reads);
+
+#ifdef ROCKSDB_RICOCHET
+  auto* mgr = RicochetMmapManager::Get();
+  if (base == nullptr && mgr != nullptr) {
+    ric_ctx_ = new RicochetFileCtx{fd, nullptr};
+    ric_region_ = new ricochet::RicochetRegion{};
+    ricochet::Handlers h;
+    h.fill  = ricochet_fill;
+    h.evict = ricochet_evict;
+    h.ctx   = ric_ctx_;
+    ricochet::region_init(ric_region_, length, h, /*use_uffd=*/true);
+    ric_ctx_->base  = ric_region_->addr;
+    mmapped_region_ = ric_region_->addr;
+    for (int i = 0; i < mgr->handlers_per_file(); i++)
+      ricochet::region_add_handler(ric_region_, /*cpu=*/-1);
+    mgr->AddRegion(ric_region_);
+  }
+#endif
 }
 
 PosixMmapReadableFile::~PosixMmapReadableFile() {
-  int ret = munmap(mmapped_region_, length_);
-  if (ret != 0) {
-    fprintf(stdout, "failed to munmap %p length %" ROCKSDB_PRIszt " \n",
-            mmapped_region_, length_);
+#ifdef ROCKSDB_RICOCHET
+  if (ric_region_) {
+    if (auto* mgr = RicochetMmapManager::Get()) mgr->RemoveRegion(ric_region_);
+    ricochet::region_destroy(ric_region_);
+    delete ric_region_;
+    delete ric_ctx_;
+  } else {
+#endif
+    int ret = munmap(mmapped_region_, length_);
+    if (ret != 0) {
+      fprintf(stdout, "failed to munmap %p length %" ROCKSDB_PRIszt " \n",
+              mmapped_region_, length_);
+    }
+#ifdef ROCKSDB_RICOCHET
   }
+#endif
   close(fd_);
 }
 
@@ -2002,4 +2032,9 @@ IOStatus PosixDirectory::FsyncWithDirOptions(
   return s;
 }
 }  // namespace ROCKSDB_NAMESPACE
+#endif
+
+#ifdef ROCKSDB_RICOCHET
+// Compiled as part of io_posix.cc to guarantee inclusion in librocksdb.a
+#include "ricochet_mmap.cc"
 #endif

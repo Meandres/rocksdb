@@ -60,6 +60,10 @@
 #define POSIX_MADV_DONTNEED 4   /* [MC1] don't need these pages */
 #endif
 
+#ifdef ROCKSDB_RICOCHET
+#include "ricochet_mmap.h"
+#endif
+
 namespace ROCKSDB_NAMESPACE {
 std::string IOErrorMsg(const std::string& context,
                        const std::string& file_name);
@@ -520,6 +524,10 @@ class PosixMmapReadableFile : public FSRandomAccessFile {
   std::string filename_;
   void* mmapped_region_;
   size_t length_;
+#ifdef ROCKSDB_RICOCHET
+  struct ricochet::RicochetRegion* ric_region_ = nullptr;
+  struct RicochetFileCtx* ric_ctx_ = nullptr;
+#endif
 
  public:
   PosixMmapReadableFile(const int fd, const std::string& fname, void* base,

@@ -104,6 +104,14 @@
 #include <io.h>  // open/close
 #endif
 
+#ifdef ROCKSDB_GEM5
+#include <gem5/m5ops.h>
+#include <m5_mmap.h>
+#endif
+#ifdef ROCKSDB_RICOCHET
+#include "env/ricochet_mmap.h"
+#endif
+
 using GFLAGS_NAMESPACE::ParseCommandLineFlags;
 using GFLAGS_NAMESPACE::RegisterFlagValidator;
 using GFLAGS_NAMESPACE::SetUsageMessage;
@@ -1711,6 +1719,21 @@ DEFINE_bool(mmap_read, ROCKSDB_NAMESPACE::Options().allow_mmap_reads,
 DEFINE_bool(mmap_write, ROCKSDB_NAMESPACE::Options().allow_mmap_writes,
             "Allow writes to occur via mmap-ing files");
 
+#ifdef ROCKSDB_RICOCHET
+DEFINE_bool(ricochet, false,
+            "Use ricochet UFFD/UPF mmap backend (requires --mmap_read). "
+            "KVM phase uses UFFD handler threads; after checkpoint each reader "
+            "thread switches to UPF.");
+#endif
+
+DEFINE_uint64(warmup_reads, 0,
+              "Reads per thread before taking a gem5 checkpoint. "
+              "0 = no checkpoint. Applies to all modes (block cache, mmap, ricochet).");
+
+DEFINE_uint64(measured_reads, 0,
+              "Reads per thread to perform in O3 measurement phase after checkpoint. "
+              "0 = use --reads / --duration as normal.");
+
 DEFINE_bool(use_direct_reads, ROCKSDB_NAMESPACE::Options().use_direct_reads,
             "Use O_DIRECT for reading data");
 
@@ -2507,7 +2530,8 @@ class Stats {
         } else {
           next_report_ += 100000;
         }
-        fprintf(stderr, "... finished %" PRIu64 " ops%30s\r", done_, "");
+        fprintf(stderr, "... finished %" PRIu64 " ops\n", done_);
+        fflush(stderr);
       } else {
         uint64_t now = clock_->NowMicros();
         int64_t usecs_since_last = now - last_report_finish_;
@@ -2846,6 +2870,9 @@ struct SharedState {
   long num_initialized;
   long num_done;
   bool start;
+
+  pthread_barrier_t checkpoint_barrier;
+  std::atomic<bool> checkpoint_taken{false};
 
   SharedState() : cv(&mu), perf_level(FLAGS_perf_level) {}
 };
@@ -3657,7 +3684,10 @@ class Benchmark {
     while (std::getline(benchmark_stream, name, ',')) {
       // Sanitize parameters
       num_ = FLAGS_num;
-      reads_ = (FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads);
+      if (FLAGS_warmup_reads > 0 && FLAGS_measured_reads > 0)
+        reads_ = static_cast<int64_t>(FLAGS_warmup_reads + FLAGS_measured_reads);
+      else
+        reads_ = (FLAGS_reads < 0 ? FLAGS_num : FLAGS_reads);
       writes_ = (FLAGS_writes < 0 ? FLAGS_num : FLAGS_writes);
       deletes_ = (FLAGS_deletes < 0 ? FLAGS_num : FLAGS_deletes);
       value_size = FLAGS_value_size;
@@ -4225,6 +4255,8 @@ class Benchmark {
     shared.num_initialized = 0;
     shared.num_done = 0;
     shared.start = false;
+    if (FLAGS_warmup_reads > 0)
+      pthread_barrier_init(&shared.checkpoint_barrier, nullptr, n);
     if (FLAGS_benchmark_write_rate_limit > 0) {
       shared.write_rate_limiter.reset(
           NewGenericRateLimiter(FLAGS_benchmark_write_rate_limit));
@@ -4282,6 +4314,8 @@ class Benchmark {
       shared.cv.Wait();
     }
     shared.mu.Unlock();
+    if (FLAGS_warmup_reads > 0)
+      pthread_barrier_destroy(&shared.checkpoint_barrier);
 
     // Stats for some threads can be excluded.
     Stats merge_stats;
@@ -6667,6 +6701,7 @@ class Benchmark {
     int64_t read = 0;
     int64_t found = 0;
     int64_t bytes = 0;
+    int64_t post_ckpt_read = 0;
     int num_keys = 0;
     int64_t key_rand = 0;
     ReadOptions options = read_options_;
@@ -6767,12 +6802,43 @@ class Benchmark {
             256, Env::IO_HIGH, nullptr /* stats */, RateLimiter::OpType::kRead);
       }
 
+      if (FLAGS_warmup_reads > 0 &&
+          read == (int64_t)FLAGS_warmup_reads &&
+          !thread->shared->checkpoint_taken.load(std::memory_order_relaxed)) {
+        int rc = pthread_barrier_wait(&thread->shared->checkpoint_barrier);
+        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
+#ifdef ROCKSDB_GEM5
+          m5_checkpoint_addr(0, 0);
+          sleep(1);  // let gem5 capture checkpoint within simQuantum (~1ms)
+#endif
+          thread->shared->checkpoint_taken.store(true,
+                                                 std::memory_order_relaxed);
+        }
+        pthread_barrier_wait(&thread->shared->checkpoint_barrier);
+#ifdef ROCKSDB_RICOCHET
+        if (FLAGS_ricochet)
+          rocksdb_ricochet_switch_upf();
+#endif
+        thread->stats.Start(thread->tid);  // discard warmup stats
+        found = 0;
+        bytes = 0;
+        continue;  // don't charge this transition read to measurement stats
+      }
+
       thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, 1, kRead);
+
+      if (FLAGS_warmup_reads > 0 &&
+          thread->shared->checkpoint_taken.load(std::memory_order_relaxed)) {
+        ++post_ckpt_read;
+        if (FLAGS_measured_reads > 0 &&
+            post_ckpt_read >= (int64_t)FLAGS_measured_reads)
+          break;
+      }
     }
 
     char msg[100];
     snprintf(msg, sizeof(msg), "(%" PRIu64 " of %" PRIu64 " found)\n", found,
-             read);
+             (FLAGS_warmup_reads > 0) ? post_ckpt_read : read);
 
     thread->stats.AddBytes(bytes);
     thread->stats.AddMessage(msg);
@@ -9630,6 +9696,21 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
     fprintf(stderr, "prefix_size > 8 required by --seek_missing_prefix\n");
     db_bench_exit(1);
   }
+
+#ifdef ROCKSDB_GEM5
+  m5op_addr = 0xFFFF0000;
+  map_m5_mem();
+#endif
+
+#ifdef ROCKSDB_RICOCHET
+  if (FLAGS_ricochet) {
+    if (!FLAGS_mmap_read) {
+      fprintf(stderr, "--ricochet requires --mmap_read\n");
+      db_bench_exit(1);
+    }
+    rocksdb_ricochet_init(FLAGS_threads, 0);
+  }
+#endif
 
   ROCKSDB_NAMESPACE::Benchmark benchmark;
   benchmark.Run(hooks);
