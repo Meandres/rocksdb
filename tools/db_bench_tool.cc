@@ -1860,6 +1860,9 @@ DEFINE_string(memtablerep, "skip_list", "");
 DEFINE_int64(hash_bucket_count, 1024 * 1024, "hash bucket count");
 DEFINE_bool(use_plain_table, false,
             "if use plain table instead of block-based table format");
+DEFINE_bool(plain_table_store_index_in_file, false,
+            "store plain table hash index in SST file instead of rebuilding "
+            "at open time (eliminates O(data) scan on DB::Open)");
 DEFINE_bool(use_cuckoo_table, false, "if use cuckoo table format");
 DEFINE_double(cuckoo_hash_ratio, 0.9, "Hash ratio for Cuckoo SST table.");
 DEFINE_bool(use_hash_search, false,
@@ -4657,6 +4660,8 @@ class Benchmark {
       plain_table_options.user_key_len = FLAGS_key_size;
       plain_table_options.bloom_bits_per_key = bloom_bits_per_key;
       plain_table_options.hash_table_ratio = 0.75;
+      plain_table_options.store_index_in_file =
+          FLAGS_plain_table_store_index_in_file;
       options.table_factory = std::shared_ptr<TableFactory>(
           NewPlainTableFactory(plain_table_options));
     } else if (FLAGS_use_cuckoo_table) {
