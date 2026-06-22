@@ -9720,6 +9720,10 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
   ROCKSDB_NAMESPACE::Benchmark benchmark;
   benchmark.Run(hooks);
 
+#ifdef ROCKSDB_GEM5
+  m5_exit_addr(0);
+#endif
+
   if (FLAGS_print_malloc_stats) {
     std::string stats_string;
     ROCKSDB_NAMESPACE::DumpMallocStats(&stats_string);
