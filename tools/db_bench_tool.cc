@@ -9735,6 +9735,9 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
   benchmark.Run(hooks);
 
 #ifdef ROCKSDB_GEM5
+#ifdef ROCKSDB_RICOCHET
+  if (FLAGS_ricochet) rocksdb_ricochet_print_stats();
+#endif
   fflush(stdout);
   fflush(stderr);
 

@@ -50,4 +50,5 @@ class RicochetMmapManager {
 extern "C" {
 void rocksdb_ricochet_init(int handlers_per_file, size_t max_cache_pages);
 void rocksdb_ricochet_switch_upf();
+void rocksdb_ricochet_print_stats();
 }
