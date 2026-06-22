@@ -107,6 +107,7 @@
 #ifdef ROCKSDB_GEM5
 #include <gem5/m5ops.h>
 #include <m5_mmap.h>
+#include <unistd.h>
 #endif
 #ifdef ROCKSDB_RICOCHET
 #include "env/ricochet_mmap.h"
@@ -9717,17 +9718,39 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
   }
 #endif
 
+#ifdef ROCKSDB_GEM5
+  // Redirect stdout to a pipe so the result line can be captured and written
+  // via m5_write_file_addr before m5_exit_addr skips RocksDB teardown.
+  int gem5_pipefd[2] = {-1, -1};
+  int gem5_saved_stdout = -1;
+  if (pipe(gem5_pipefd) == 0) {
+    gem5_saved_stdout = dup(STDOUT_FILENO);
+    dup2(gem5_pipefd[1], STDOUT_FILENO);
+    close(gem5_pipefd[1]);
+    gem5_pipefd[1] = -1;
+  }
+#endif
+
   ROCKSDB_NAMESPACE::Benchmark benchmark;
   benchmark.Run(hooks);
 
 #ifdef ROCKSDB_GEM5
   fflush(stdout);
   fflush(stderr);
-  // Write a sentinel file to signal successful completion.
-  // The actual benchmark result line is in board.pc.com_1.device (serial log).
-  static const char kDoneMarker[] = "done";
-  m5_write_file_addr((void *)kDoneMarker, sizeof(kDoneMarker) - 1, 0,
-                     "result_benchmark.txt");
+
+  std::string gem5_result;
+  if (gem5_saved_stdout >= 0) {
+    dup2(gem5_saved_stdout, STDOUT_FILENO);
+    close(gem5_saved_stdout);
+    char gem5_buf[16384];
+    ssize_t gem5_n;
+    while ((gem5_n = read(gem5_pipefd[0], gem5_buf, sizeof(gem5_buf))) > 0)
+      gem5_result.append(gem5_buf, gem5_n);
+    close(gem5_pipefd[0]);
+  }
+
+  m5_write_file_addr((void *)gem5_result.c_str(), (uint64_t)gem5_result.size(),
+                     0, "result_benchmark.txt");
   m5_exit_addr(0);
 #endif
 
