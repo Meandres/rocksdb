@@ -9721,6 +9721,13 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
   benchmark.Run(hooks);
 
 #ifdef ROCKSDB_GEM5
+  fflush(stdout);
+  fflush(stderr);
+  // Write a sentinel file to signal successful completion.
+  // The actual benchmark result line is in board.pc.com_1.device (serial log).
+  static const char kDoneMarker[] = "done";
+  m5_write_file_addr((void *)kDoneMarker, sizeof(kDoneMarker) - 1, 0,
+                     "result_benchmark.txt");
   m5_exit_addr(0);
 #endif
 
