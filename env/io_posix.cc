@@ -1209,11 +1209,11 @@ PosixMmapReadableFile::PosixMmapReadableFile(const int fd,
     h.fill  = ricochet_fill;
     h.evict = ricochet_evict;
     h.ctx   = ric_ctx_;
-    ricochet::region_init(ric_region_, length, h, /*use_uffd=*/true);
+    ricochet::region_init(ric_region_, length, h, false);
     ric_ctx_->base  = ric_region_->addr;
     mmapped_region_ = ric_region_->addr;
     for (int i = 0; i < mgr->handlers_per_file(); i++)
-      ricochet::region_add_handler(ric_region_, /*cpu=*/-1);
+      ricochet::region_add_handler(ric_region_, -1);
     mgr->AddRegion(ric_region_);
   }
 #endif
