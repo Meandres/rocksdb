@@ -1212,8 +1212,6 @@ PosixMmapReadableFile::PosixMmapReadableFile(const int fd,
     ricochet::region_init(ric_region_, length, h, false);
     ric_ctx_->base  = ric_region_->addr;
     mmapped_region_ = ric_region_->addr;
-    for (int i = 0; i < mgr->handlers_per_file(); i++)
-      ricochet::region_add_handler(ric_region_, -1);
     mgr->AddRegion(ric_region_);
   }
 #endif

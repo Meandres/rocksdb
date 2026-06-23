@@ -30,11 +30,12 @@ static RicochetMmapManager* g_instance = nullptr;
 
 RicochetMmapManager* RicochetMmapManager::Get() { return g_instance; }
 
-void RicochetMmapManager::Init(int handlers_per_file,
-                                size_t max_cache_pages) {
+void RicochetMmapManager::Init(int ncpus, size_t max_cache_pages) {
   ricochet::cache_init(max_cache_pages);
+  if (ncpus <= 0)
+    ncpus = (int)sysconf(_SC_NPROCESSORS_ONLN);
+  ricochet::handler_pool_init(ncpus);
   g_instance = new RicochetMmapManager();
-  g_instance->handlers_per_file_ = handlers_per_file;
 }
 
 void RicochetMmapManager::AddRegion(ricochet::RicochetRegion* r) {
@@ -50,15 +51,10 @@ void RicochetMmapManager::RemoveRegion(ricochet::RicochetRegion* r) {
 
 void RicochetMmapManager::SwitchToUPF() {
 #ifdef ROCKSDB_GEM5
-  // Snapshot the region list without holding the lock during region_switch
-  // (which may block joining UFFD threads).
-  std::vector<ricochet::RicochetRegion*> snapshot;
-  {
-    std::lock_guard<std::mutex> lk(mu_);
-    snapshot = regions_;
-  }
-  for (auto* r : snapshot) {
-    ricochet::region_switch(r);
+  ricochet::stop_handler_pool();  // join all pool threads (once, globally)
+  if (ricochet::region_register_thread() < 0) {
+    perror("SwitchToUPF: region_register_thread failed");
+    abort();
   }
 #endif
 }
@@ -69,9 +65,8 @@ void RicochetMmapManager::SwitchToUPF() {
 // C API
 // ---------------------------------------------------------------------------
 
-void rocksdb_ricochet_init(int handlers_per_file, size_t max_cache_pages) {
-  ROCKSDB_NAMESPACE::RicochetMmapManager::Init(handlers_per_file,
-                                                max_cache_pages);
+void rocksdb_ricochet_init(int ncpus, size_t max_cache_pages) {
+  ROCKSDB_NAMESPACE::RicochetMmapManager::Init(ncpus, max_cache_pages);
 }
 
 void rocksdb_ricochet_switch_upf() {
