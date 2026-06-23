@@ -51,11 +51,14 @@ void RicochetMmapManager::RemoveRegion(ricochet::RicochetRegion* r) {
 
 void RicochetMmapManager::SwitchToUPF() {
 #ifdef ROCKSDB_GEM5
+  fprintf(stderr, "[dbg] SwitchToUPF: called on tid=%d\n", (int)gettid());
   ricochet::stop_handler_pool();  // join all pool threads (once, globally)
+  fprintf(stderr, "[dbg] SwitchToUPF: pool stopped, registering UINTR\n");
   if (ricochet::region_register_thread() < 0) {
     perror("SwitchToUPF: region_register_thread failed");
     abort();
   }
+  fprintf(stderr, "[dbg] SwitchToUPF: done for tid=%d\n", (int)gettid());
 #endif
 }
 
