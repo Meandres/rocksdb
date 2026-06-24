@@ -1722,6 +1722,7 @@ if(WITH_BENCHMARK_TOOLS)
   # gem5 m5ops + UPF: only when M5_LIB is set.
   if(M5_LIB)
     target_compile_definitions(db_bench${ARTIFACT_SUFFIX} PRIVATE ROCKSDB_GEM5)
+    target_compile_definitions(rocksdb PRIVATE ROCKSDB_GEM5)
     target_link_libraries(db_bench${ARTIFACT_SUFFIX} ${M5_LIB})
     target_include_directories(db_bench${ARTIFACT_SUFFIX} PRIVATE
       ${M5_INCLUDE} ${GEM5_INCLUDE})
