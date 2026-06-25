@@ -6787,10 +6787,13 @@ class Benchmark {
               &get_merge_operands_options, &number_of_operands);
         }
       } else {
-        if (post_ckpt_read == 0)
+        bool in_o3 = FLAGS_warmup_reads > 0 &&
+                     thread->shared->checkpoint_taken.load(std::memory_order_relaxed) &&
+                     post_ckpt_read == 0;
+        if (in_o3)
           fprintf(stderr, "[dbg] tid=%d pre_get read=%ld\n", thread->tid, read);
         s = db_with_cfh->db->Get(options, cfh, key, &pinnable_val, ts_ptr);
-        if (post_ckpt_read == 0)
+        if (in_o3)
           fprintf(stderr, "[dbg] tid=%d post_get read=%ld\n", thread->tid, read);
       }
 
