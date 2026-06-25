@@ -6838,6 +6838,9 @@ class Benchmark {
       if (FLAGS_warmup_reads > 0 &&
           thread->shared->checkpoint_taken.load(std::memory_order_relaxed)) {
         ++post_ckpt_read;
+        if (post_ckpt_read == 1 || post_ckpt_read % 50 == 0)
+          fprintf(stderr, "[dbg] tid=%d post_ckpt_read=%ld\n",
+                  thread->tid, post_ckpt_read);
         if (FLAGS_measured_reads > 0 &&
             post_ckpt_read >= (int64_t)FLAGS_measured_reads)
           break;
