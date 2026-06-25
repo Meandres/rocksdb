@@ -6825,6 +6825,8 @@ class Benchmark {
         if (FLAGS_ricochet)
           rocksdb_ricochet_switch_upf();
 #endif
+        // Wait for all threads to finish switching before starting measurement.
+        pthread_barrier_wait(&thread->shared->checkpoint_barrier);
         thread->stats.Start(thread->tid);  // discard warmup stats
         found = 0;
         bytes = 0;
