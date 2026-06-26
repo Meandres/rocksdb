@@ -1725,6 +1725,8 @@ DEFINE_bool(ricochet, false,
             "Use ricochet UFFD/UPF mmap backend (requires --mmap_read). "
             "KVM phase uses UFFD handler threads; after checkpoint each reader "
             "thread switches to UPF.");
+DEFINE_bool(ricochet_debug, false,
+            "Enable verbose debug prints from ricochet and checkpoint logic.");
 #endif
 
 DEFINE_uint64(warmup_reads, 0,
@@ -6748,7 +6750,7 @@ class Benchmark {
       }
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
       read++;
-      if (FLAGS_warmup_reads > 0 &&
+      if (FLAGS_ricochet_debug && FLAGS_warmup_reads > 0 &&
           read == (int64_t)FLAGS_warmup_reads + 1 &&
           thread->shared->checkpoint_taken.load(std::memory_order_relaxed))
         fprintf(stderr, "[dbg] tid=%d measure_start read=%ld\n", thread->tid, read);
@@ -6791,7 +6793,7 @@ class Benchmark {
               &get_merge_operands_options, &number_of_operands);
         }
       } else {
-        bool in_o3 = FLAGS_warmup_reads > 0 &&
+        bool in_o3 = FLAGS_ricochet_debug && FLAGS_warmup_reads > 0 &&
                      thread->shared->checkpoint_taken.load(std::memory_order_relaxed) &&
                      post_ckpt_read == 0;
         if (in_o3)
@@ -6854,7 +6856,7 @@ class Benchmark {
       if (FLAGS_warmup_reads > 0 &&
           thread->shared->checkpoint_taken.load(std::memory_order_relaxed)) {
         ++post_ckpt_read;
-        if (post_ckpt_read == 1 || post_ckpt_read % 50 == 0)
+        if (FLAGS_ricochet_debug && (post_ckpt_read == 1 || post_ckpt_read % 50 == 0))
           fprintf(stderr, "[dbg] tid=%d post_ckpt_read=%ld\n",
                   thread->tid, post_ckpt_read);
         if (FLAGS_measured_reads > 0 &&
@@ -9737,6 +9739,8 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
     }
     rocksdb_ricochet_init(FLAGS_threads, 0);
   }
+  if (FLAGS_ricochet_debug)
+    ricochet::set_debug(true);
 #endif
 
 #ifdef ROCKSDB_GEM5
