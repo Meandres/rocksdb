@@ -6841,9 +6841,9 @@ class Benchmark {
 #endif
         // Spin-based barrier: after _stui() enables UINTR, futex waits may not
         // wake correctly in gem5 O3, so we use a user-space spin counter.
-        thread->shared->upf_ready.fetch_add(1, std::memory_order_release);
+        thread->shared->upf_ready.fetch_add(1, std::memory_order_seq_cst);
         int n_total = thread->shared->total;
-        while (thread->shared->upf_ready.load(std::memory_order_acquire) < n_total)
+        while (thread->shared->upf_ready.load(std::memory_order_seq_cst) < n_total)
           __builtin_ia32_pause();
         fprintf(stderr, "[dbg] tid=%d post_spin_barrier\n", thread->tid);
         thread->stats.Start(thread->tid);  // discard warmup stats
