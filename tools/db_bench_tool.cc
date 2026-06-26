@@ -6748,6 +6748,10 @@ class Benchmark {
       }
       GenerateKeyFromInt(key_rand, FLAGS_num, &key);
       read++;
+      if (FLAGS_warmup_reads > 0 &&
+          read == (int64_t)FLAGS_warmup_reads + 1 &&
+          thread->shared->checkpoint_taken.load(std::memory_order_relaxed))
+        fprintf(stderr, "[dbg] tid=%d measure_start read=%ld\n", thread->tid, read);
       std::string ts_ret;
       std::string* ts_ptr = nullptr;
       if (user_timestamp_size_ > 0) {
@@ -6834,7 +6838,9 @@ class Benchmark {
 #endif
         // Wait for all threads to finish switching before starting measurement.
         pthread_barrier_wait(&thread->shared->checkpoint_barrier);
+        fprintf(stderr, "[dbg] tid=%d post_b3\n", thread->tid);
         thread->stats.Start(thread->tid);  // discard warmup stats
+        fprintf(stderr, "[dbg] tid=%d post_stats_start\n", thread->tid);
         found = 0;
         bytes = 0;
         continue;  // don't charge this transition read to measurement stats
