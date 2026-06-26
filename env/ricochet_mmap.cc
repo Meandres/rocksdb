@@ -62,6 +62,12 @@ void RicochetMmapManager::SwitchToUPF() {
 #endif
 }
 
+void RicochetMmapManager::EnableUINTR() {
+#ifdef ROCKSDB_GEM5
+  ricochet::region_enable_uintr();
+#endif
+}
+
 }  // namespace ROCKSDB_NAMESPACE
 
 // ---------------------------------------------------------------------------
@@ -75,6 +81,11 @@ void rocksdb_ricochet_init(int ncpus, size_t max_cache_pages) {
 void rocksdb_ricochet_switch_upf() {
   auto* mgr = ROCKSDB_NAMESPACE::RicochetMmapManager::Get();
   if (mgr) mgr->SwitchToUPF();
+}
+
+void rocksdb_ricochet_enable_uintr() {
+  auto* mgr = ROCKSDB_NAMESPACE::RicochetMmapManager::Get();
+  if (mgr) mgr->EnableUINTR();
 }
 
 void rocksdb_ricochet_print_stats() {

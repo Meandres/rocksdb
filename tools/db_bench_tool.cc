@@ -2877,7 +2877,6 @@ struct SharedState {
 
   pthread_barrier_t checkpoint_barrier;
   std::atomic<bool> checkpoint_taken{false};
-  std::atomic<int> upf_ready{0};
 
   SharedState() : cv(&mu), perf_level(FLAGS_perf_level) {}
 };
@@ -4260,10 +4259,8 @@ class Benchmark {
     shared.num_initialized = 0;
     shared.num_done = 0;
     shared.start = false;
-    if (FLAGS_warmup_reads > 0) {
+    if (FLAGS_warmup_reads > 0)
       pthread_barrier_init(&shared.checkpoint_barrier, nullptr, n);
-      shared.upf_ready.store(0, std::memory_order_relaxed);
-    }
     if (FLAGS_benchmark_write_rate_limit > 0) {
       shared.write_rate_limiter.reset(
           NewGenericRateLimiter(FLAGS_benchmark_write_rate_limit));
@@ -6837,15 +6834,15 @@ class Benchmark {
         pthread_barrier_wait(&thread->shared->checkpoint_barrier);
 #ifdef ROCKSDB_RICOCHET
         if (FLAGS_ricochet)
-          rocksdb_ricochet_switch_upf();
+          rocksdb_ricochet_switch_upf();  // stop pool + register (no _stui yet)
 #endif
-        // Spin-based barrier: after _stui() enables UINTR, futex waits may not
-        // wake correctly in gem5 O3, so we use a user-space spin counter.
-        thread->shared->upf_ready.fetch_add(1, std::memory_order_seq_cst);
-        int n_total = thread->shared->total;
-        while (thread->shared->upf_ready.load(std::memory_order_seq_cst) < n_total)
-          __builtin_ia32_pause();
-        fprintf(stderr, "[dbg] tid=%d post_spin_barrier\n", thread->tid);
+        // All threads registered; barrier is safe because UINTR is not yet
+        // enabled (no _stui called), so the futex wait cannot be disrupted.
+        pthread_barrier_wait(&thread->shared->checkpoint_barrier);
+#ifdef ROCKSDB_RICOCHET
+        if (FLAGS_ricochet)
+          rocksdb_ricochet_enable_uintr();  // _stui() per thread
+#endif
         thread->stats.Start(thread->tid);  // discard warmup stats
         found = 0;
         bytes = 0;

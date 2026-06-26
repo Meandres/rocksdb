@@ -34,9 +34,14 @@ class RicochetMmapManager {
   void RemoveRegion(ricochet::RicochetRegion* r);
 
   // Call from every reader thread at the UFFD→UPF switch point.
-  // Stops all handler pool threads (once, globally) then registers UPF
-  // on the calling thread.
+  // Stops all handler pool threads (once, globally) then registers the UINTR
+  // handler.  Does NOT enable UINTR reception (_stui); call EnableUINTR() after
+  // any barrier so the futex wait is not disrupted by a pending interrupt.
   void SwitchToUPF();
+
+  // Enable UINTR reception on the calling thread.  Call after SwitchToUPF()
+  // and after any pthread_barrier_wait that must not be disturbed by UINTRs.
+  void EnableUINTR();
 
  private:
   std::mutex mu_;
@@ -49,5 +54,6 @@ class RicochetMmapManager {
 extern "C" {
 void rocksdb_ricochet_init(int ncpus, size_t max_cache_pages);
 void rocksdb_ricochet_switch_upf();
+void rocksdb_ricochet_enable_uintr();
 void rocksdb_ricochet_print_stats();
 }
