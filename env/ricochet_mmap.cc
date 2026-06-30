@@ -3,6 +3,8 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -34,7 +36,24 @@ void RicochetMmapManager::Init(int ncpus, size_t max_cache_pages) {
   ricochet::cache_init(max_cache_pages);
   if (ncpus <= 0)
     ncpus = (int)sysconf(_SC_NPROCESSORS_ONLN);
-  ricochet::handler_pool_init(ncpus);
+
+  const char *backend = getenv("BACKEND");
+  if (backend && strcmp(backend, "exmap") == 0) {
+    // EXMAP_VMA_MB controls the total virtual address space reserved for all
+    // file regions.  Set it to at least the sum of all SST file sizes.
+    const char *vma_mb_env = getenv("EXMAP_VMA_MB");
+    size_t vma_size = vma_mb_env
+                      ? (size_t)atoll(vma_mb_env) * 1024 * 1024
+                      : (size_t)16 * 1024 * 1024 * 1024ULL;  // 16 GB default
+    size_t phys_pages = ricochet::global_cache().physCount;
+    if (ricochet::exmap_backend_init(phys_pages, ncpus, vma_size) < 0) {
+      perror("ricochet: exmap_backend_init failed, falling back to UFFD");
+      ricochet::handler_pool_init(ncpus);
+    }
+  } else {
+    ricochet::handler_pool_init(ncpus);
+  }
+
   g_instance = new RicochetMmapManager();
 }
 
