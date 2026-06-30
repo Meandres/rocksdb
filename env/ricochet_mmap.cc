@@ -1,5 +1,5 @@
 #include "ricochet_mmap.h"
-#include "clock.hpp"
+#include "replacement.hpp"
 
 #include <cinttypes>
 #include <cstdio>
@@ -57,7 +57,7 @@ void RicochetMmapManager::SwitchToUPF() {
     abort();
   }
 #endif
-  ricochet::global_clock().evictedPageCount.store(0, std::memory_order_relaxed);
+  ricochet::global_cache().evictedPageCount.store(0, std::memory_order_relaxed);
 }
 
 void RicochetMmapManager::EnableUINTR() {
@@ -87,7 +87,7 @@ void rocksdb_ricochet_enable_uintr() {
 }
 
 void rocksdb_ricochet_print_stats() {
-  ricochet::ClockCache& c = ricochet::global_clock();
+  ricochet::PageCache& c = ricochet::global_cache();
   uint64_t faults = c.upfFaultCount.load(std::memory_order_relaxed);
   uint64_t evicts = c.evictedPageCount.load(std::memory_order_relaxed);
   printf("ricochet_stats: upf_faults=%" PRIu64 " evicted_pages=%" PRIu64 "\n",
