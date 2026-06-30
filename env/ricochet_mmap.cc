@@ -57,6 +57,7 @@ void RicochetMmapManager::SwitchToUPF() {
     abort();
   }
 #endif
+  ricochet::global_clock().evictedPageCount.store(0, std::memory_order_relaxed);
 }
 
 void RicochetMmapManager::EnableUINTR() {
