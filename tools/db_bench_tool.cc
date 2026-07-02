@@ -107,6 +107,8 @@
 #ifdef ROCKSDB_GEM5
 #include <gem5/m5ops.h>
 #include <m5_mmap.h>
+#include <pthread.h>
+#include <sched.h>
 #include <unistd.h>
 #endif
 #ifdef ROCKSDB_RICOCHET
@@ -1727,6 +1729,13 @@ DEFINE_bool(ricochet, false,
             "thread switches to UPF.");
 DEFINE_bool(ricochet_debug, false,
             "Enable verbose debug prints from ricochet and checkpoint logic.");
+#endif
+
+#ifdef ROCKSDB_GEM5
+DEFINE_bool(pin_threads, false,
+            "Pin each benchmark thread to its own CPU core (thread i -> CPU i). "
+            "Reduces TLB-shootdown scope and prevents cache thrashing from "
+            "thread migration during O3 measurement.");
 #endif
 
 DEFINE_uint64(warmup_reads, 0,
@@ -4224,6 +4233,14 @@ class Benchmark {
     ThreadArg* arg = static_cast<ThreadArg*>(v);
     SharedState* shared = arg->shared;
     ThreadState* thread = arg->thread;
+#ifdef ROCKSDB_GEM5
+    if (FLAGS_pin_threads) {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET(thread->tid, &cpuset);
+      pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+    }
+#endif
     {
       MutexLock l(&shared->mu);
       shared->num_initialized++;
