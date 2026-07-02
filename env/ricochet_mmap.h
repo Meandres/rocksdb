@@ -12,14 +12,12 @@ namespace ROCKSDB_NAMESPACE {
 // Per-file context owned by each ricochet-backed PosixMmapReadableFile.
 struct RicochetFileCtx {
   int fd;     // file descriptor kept open for pread
-  void* base; // region->addr, set after region_init, used by evict handler
+  void* base; // region->addr, set after region_init
 };
 
 // Fill handler: pread one 4 KiB page from the backing file.
+// Eviction uses the library's default batched MADV_DONTNEED path.
 void ricochet_fill(void* buf, size_t offset, void* ctx);
-
-// Evict handler: release the physical page from the anonymous mapping.
-void ricochet_evict(size_t offset, void* ctx);
 
 // Singleton that tracks all open ricochet regions.  Constructed once via
 // Init(); Get() returns nullptr until then so callers can check cheaply.

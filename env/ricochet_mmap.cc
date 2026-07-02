@@ -19,11 +19,6 @@ void ricochet_fill(void* buf, size_t offset, void* ctx) {
   pread(c->fd, buf, 4096, static_cast<off_t>(offset));
 }
 
-void ricochet_evict(size_t offset, void* ctx) {
-  auto* c = static_cast<RicochetFileCtx*>(ctx);
-  madvise(static_cast<char*>(c->base) + offset, 4096, MADV_DONTNEED);
-}
-
 // ---------------------------------------------------------------------------
 // RicochetMmapManager
 // ---------------------------------------------------------------------------
