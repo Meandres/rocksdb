@@ -56,7 +56,16 @@ void RicochetMmapManager::SwitchToUPF() {
     abort();
   }
 #endif
-  ricochet::global_cache().evictedPageCount.store(0, std::memory_order_relaxed);
+  // Reset counters so stats cover the measured (UPF) phase only.
+  auto& c = ricochet::global_cache();
+  c.evictedPageCount.store(0, std::memory_order_relaxed);
+  c.ptFaults.store(0, std::memory_order_relaxed);
+  c.ptDeliveryCycles.store(0, std::memory_order_relaxed);
+  c.ptFillCycles.store(0, std::memory_order_relaxed);
+  c.ptMapCycles.store(0, std::memory_order_relaxed);
+  c.ptHandlerCycles.store(0, std::memory_order_relaxed);
+  c.ptEvictCycles.store(0, std::memory_order_relaxed);
+  c.ptEvictCalls.store(0, std::memory_order_relaxed);
 }
 
 void RicochetMmapManager::EnableUINTR() {
@@ -85,10 +94,35 @@ void rocksdb_ricochet_enable_uintr() {
   if (mgr) mgr->EnableUINTR();
 }
 
+void rocksdb_ricochet_set_precise(int enabled) {
+  ricochet::precise_timing = (enabled != 0);
+}
+
 void rocksdb_ricochet_print_stats() {
   ricochet::PageCache& c = ricochet::global_cache();
   uint64_t faults = c.upfFaultCount.load(std::memory_order_relaxed);
   uint64_t evicts = c.evictedPageCount.load(std::memory_order_relaxed);
   printf("ricochet_stats: upf_faults=%" PRIu64 " evicted_pages=%" PRIu64 "\n",
          faults, evicts);
+
+  if (!ricochet::precise_timing) return;
+
+  // Per-fault cycle breakdown (rdtsc cycles; divide by CPU GHz for ns).
+  uint64_t n   = c.ptFaults.load(std::memory_order_relaxed);
+  uint64_t nev = c.ptEvictCalls.load(std::memory_order_relaxed);
+  if (n == 0) {
+    printf("ricochet_timing: no faults measured\n");
+    return;
+  }
+  uint64_t deliver = c.ptDeliveryCycles.load(std::memory_order_relaxed);
+  uint64_t fill    = c.ptFillCycles.load(std::memory_order_relaxed);
+  uint64_t map     = c.ptMapCycles.load(std::memory_order_relaxed);
+  uint64_t handler = c.ptHandlerCycles.load(std::memory_order_relaxed);
+  uint64_t evc     = c.ptEvictCycles.load(std::memory_order_relaxed);
+  printf("ricochet_timing: faults=%" PRIu64 " cyc/fault: "
+         "delivery=%" PRIu64 " fill=%" PRIu64 " map=%" PRIu64
+         " handler=%" PRIu64 " evict_total=%" PRIu64
+         " | evict_calls=%" PRIu64 " cyc/evict=%" PRIu64 "\n",
+         n, deliver / n, fill / n, map / n, handler / n, evc / n,
+         nev, nev ? evc / nev : 0);
 }

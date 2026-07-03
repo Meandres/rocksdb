@@ -1729,6 +1729,9 @@ DEFINE_bool(ricochet, false,
             "thread switches to UPF.");
 DEFINE_bool(ricochet_debug, false,
             "Enable verbose debug prints from ricochet and checkpoint logic.");
+DEFINE_bool(ricochet_precise, false,
+            "Enable per-fault cycle accounting in the ricochet backend; the "
+            "breakdown is printed at benchmark end.");
 #endif
 
 #ifdef ROCKSDB_GEM5
@@ -9758,6 +9761,8 @@ int db_bench_tool(int argc, char** argv, ToolHooks& hooks) {
   }
   if (FLAGS_ricochet_debug)
     ricochet::set_debug(true);
+  if (FLAGS_ricochet_precise)
+    rocksdb_ricochet_set_precise(1);
 #endif
 
 #ifdef ROCKSDB_GEM5

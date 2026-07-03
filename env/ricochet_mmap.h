@@ -53,5 +53,6 @@ extern "C" {
 void rocksdb_ricochet_init(int ncpus, size_t max_cache_pages);
 void rocksdb_ricochet_switch_upf();
 void rocksdb_ricochet_enable_uintr();
+void rocksdb_ricochet_set_precise(int enabled);
 void rocksdb_ricochet_print_stats();
 }
