@@ -1208,7 +1208,8 @@ PosixMmapReadableFile::PosixMmapReadableFile(const int fd,
     ricochet::Handlers h;
     h.fill = ricochet_fill;
     h.ctx  = ric_ctx_;
-    ricochet::region_init(ric_region_, length, h, false);
+    // Map the region over the SST fd so fills use a single MADV_POPULATE_READ.
+    ricochet::region_init(ric_region_, length, h, false, fd);
     ric_ctx_->base  = ric_region_->addr;
     mmapped_region_ = ric_region_->addr;
     mgr->AddRegion(ric_region_);
