@@ -1208,6 +1208,13 @@ PosixMmapReadableFile::PosixMmapReadableFile(const int fd,
     ricochet::Handlers h;
     h.fill = ricochet_fill;
     h.ctx  = ric_ctx_;
+    // Green-thread mode: when set, a UPF fault yields the faulting green thread
+    // (submit+park) and a resolver performs the fill (unpark). Null => OS-thread
+    // mode (blocking inline fill). Read per-region so SSTs opened after the
+    // hooks are installed (e.g. by compaction) are covered too.
+    h.submit = g_ric_submit;
+    h.park   = g_ric_park;
+    h.unpark = g_ric_unpark;
     // Map the region over the SST fd so fills use a single MADV_POPULATE_READ.
     ricochet::region_init(ric_region_, length, h, false, fd);
     ric_ctx_->base  = ric_region_->addr;

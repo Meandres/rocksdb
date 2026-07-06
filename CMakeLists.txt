@@ -1709,6 +1709,9 @@ if(WITH_BENCHMARK_TOOLS)
       target_compile_definitions(${_t} PRIVATE ROCKSDB_RICOCHET)
       target_include_directories(${_t} PRIVATE ${RICOCHET_INCLUDE})
     endforeach()
+    # Application-side green-thread scheduler for --upf_sched (provides ricochet's
+    # submit/park/unpark hooks). Only compiled when ricochet is enabled.
+    target_sources(db_bench${ARTIFACT_SUFFIX} PRIVATE tools/upf_sched.cc)
     if(RICOCHET_STATIC)
       target_link_libraries(rocksdb INTERFACE ${RICOCHET_STATIC})
     elseif(RICOCHET_LIB)
@@ -1726,6 +1729,9 @@ if(WITH_BENCHMARK_TOOLS)
     target_link_libraries(db_bench${ARTIFACT_SUFFIX} ${M5_LIB})
     target_include_directories(db_bench${ARTIFACT_SUFFIX} PRIVATE
       ${M5_INCLUDE} ${GEM5_INCLUDE})
+    # upf_sched.cc uses _clui/_stui (UINTR) intrinsics; the rest of db_bench does
+    # not, but -muintr on the target is harmless for TUs that never emit them.
+    target_compile_options(db_bench${ARTIFACT_SUFFIX} PRIVATE -muintr -U_FORTIFY_SOURCE)
   endif()
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}

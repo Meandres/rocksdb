@@ -19,6 +19,11 @@ void ricochet_fill(void* buf, size_t offset, void* ctx) {
   pread(c->fd, buf, 4096, static_cast<off_t>(offset));
 }
 
+// Green-thread scheduler hooks (definitions; see ricochet_mmap.h).
+ricochet::submit_fn g_ric_submit = nullptr;
+ricochet::park_fn g_ric_park = nullptr;
+ricochet::unpark_fn g_ric_unpark = nullptr;
+
 // ---------------------------------------------------------------------------
 // RicochetMmapManager
 // ---------------------------------------------------------------------------
@@ -96,6 +101,14 @@ void rocksdb_ricochet_enable_uintr() {
 
 void rocksdb_ricochet_set_precise(int enabled) {
   ricochet::precise_timing = (enabled != 0);
+}
+
+void rocksdb_ricochet_set_sched_hooks(void* submit, void* park, void* unpark) {
+  ROCKSDB_NAMESPACE::g_ric_submit =
+      reinterpret_cast<ricochet::submit_fn>(submit);
+  ROCKSDB_NAMESPACE::g_ric_park = reinterpret_cast<ricochet::park_fn>(park);
+  ROCKSDB_NAMESPACE::g_ric_unpark =
+      reinterpret_cast<ricochet::unpark_fn>(unpark);
 }
 
 void rocksdb_ricochet_print_stats() {

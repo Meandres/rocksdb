@@ -19,6 +19,15 @@ struct RicochetFileCtx {
 // Eviction uses the library's default batched MADV_DONTNEED path.
 void ricochet_fill(void* buf, size_t offset, void* ctx);
 
+// Global green-thread scheduler hooks, attached to every ricochet region's
+// Handlers at construction (PosixMmapReadableFile). All null (default) =>
+// OS-thread mode: fills run inline/blocking on the faulting thread. Set once via
+// rocksdb_ricochet_set_sched_hooks() before the measured phase; regions opened
+// afterwards (e.g. by compaction) pick them up because the ctor re-reads them.
+extern ricochet::submit_fn g_ric_submit;
+extern ricochet::park_fn g_ric_park;
+extern ricochet::unpark_fn g_ric_unpark;
+
 // Singleton that tracks all open ricochet regions.  Constructed once via
 // Init(); Get() returns nullptr until then so callers can check cheaply.
 class RicochetMmapManager {
@@ -55,4 +64,7 @@ void rocksdb_ricochet_switch_upf();
 void rocksdb_ricochet_enable_uintr();
 void rocksdb_ricochet_set_precise(int enabled);
 void rocksdb_ricochet_print_stats();
+// Install app-side green-thread scheduler hooks (upf::sched_submit/park/unpark).
+// Passing nullptr for all three restores OS-thread mode.
+void rocksdb_ricochet_set_sched_hooks(void* submit, void* park, void* unpark);
 }
