@@ -107,3 +107,9 @@ void rocksdb_ricochet_print_stats() {
   // Single source of truth: the library formats ricochet_stats/ricochet_timing.
   fputs(ricochet::precise_stats_report().c_str(), stdout);
 }
+
+void rocksdb_ricochet_pin_range(const void* addr, size_t len) {
+  if (!ROCKSDB_NAMESPACE::RicochetMmapManager::Get()) return;
+  if (!ricochet::region_lookup(reinterpret_cast<uintptr_t>(addr))) return;
+  ricochet::region_pin_range(const_cast<void*>(addr), len);
+}

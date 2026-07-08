@@ -34,6 +34,12 @@
 #include "util/stop_watch.h"
 #include "util/string_util.h"
 
+#ifdef ROCKSDB_RICOCHET
+// Defined in env/ricochet_mmap.cc; pins in-file index/bloom pages of a
+// ricochet-backed mapping so replacement never evicts them.
+extern "C" void rocksdb_ricochet_pin_range(const void* addr, size_t len);
+#endif
+
 namespace ROCKSDB_NAMESPACE {
 
 namespace {
@@ -344,6 +350,18 @@ Status PlainTableReader::PopulateIndex(TableProperties* props,
   } else {
     index_block = nullptr;
   }
+
+#ifdef ROCKSDB_RICOCHET
+  // In mmap mode the in-file index/bloom slices point into the ricochet
+  // region.  Pin those pages so every lookup's metadata accesses stay resident
+  // instead of thrashing with data pages (no-op outside a ricochet region).
+  if (index_in_file) {
+    rocksdb_ricochet_pin_range(index_block->data(), index_block->size());
+    if (bloom_in_file) {
+      rocksdb_ricochet_pin_range(bloom_block->data(), bloom_block->size());
+    }
+  }
+#endif
 
   if ((prefix_extractor_ == nullptr) && (hash_table_ratio != 0)) {
     // moptions.prefix_extractor is requried for a hash-based look-up.

@@ -67,4 +67,8 @@ void rocksdb_ricochet_print_stats();
 // Install app-side green-thread scheduler hooks (upf::sched_submit/park/unpark).
 // Passing nullptr for all three restores OS-thread mode.
 void rocksdb_ricochet_set_sched_hooks(void* submit, void* park, void* unpark);
+// Pin a range of a ricochet-backed mapping (e.g. a plain table's in-file
+// index): populates the pages and exempts them from replacement.  No-op when
+// ricochet is not initialized or addr lies outside any registered region.
+void rocksdb_ricochet_pin_range(const void* addr, size_t len);
 }
