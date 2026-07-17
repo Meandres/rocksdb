@@ -6863,6 +6863,10 @@ class Benchmark {
       if (FLAGS_warmup_reads > 0 &&
           read == (int64_t)FLAGS_warmup_reads &&
           !thread->shared->checkpoint_taken.load(std::memory_order_relaxed)) {
+#ifdef ROCKSDB_RICOCHET
+        if (FLAGS_ricochet)
+          rocksdb_ricochet_prefault_stack();  // KVM phase; switch-time mlock becomes a no-op
+#endif
         int rc = pthread_barrier_wait(&thread->shared->checkpoint_barrier);
         if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
 #ifdef ROCKSDB_GEM5
@@ -7789,6 +7793,10 @@ class Benchmark {
       for (int64_t w = 0; w < static_cast<int64_t>(FLAGS_warmup_reads); w++) {
         MixGraphOnce(sc, os0);
       }
+#ifdef ROCKSDB_RICOCHET
+      if (FLAGS_ricochet)
+        rocksdb_ricochet_prefault_stack();  // KVM phase; switch-time mlock becomes a no-op
+#endif
       int rc = pthread_barrier_wait(&thread->shared->checkpoint_barrier);
       serial = (rc == PTHREAD_BARRIER_SERIAL_THREAD);
       if (serial) {

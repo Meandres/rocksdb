@@ -62,6 +62,10 @@ extern "C" {
 void rocksdb_ricochet_init(int ncpus, size_t max_cache_pages);
 void rocksdb_ricochet_switch_upf();
 void rocksdb_ricochet_enable_uintr();
+// Prefault + mlock the calling thread's stack during warmup (KVM phase) so the
+// registration-time mlock inside switch_upf becomes a no-op instead of a
+// serialized mmap_write_lock convoy at the measured-phase boundary.
+void rocksdb_ricochet_prefault_stack();
 void rocksdb_ricochet_set_precise(int enabled);
 void rocksdb_ricochet_print_stats();
 // Install app-side green-thread scheduler hooks (upf::sched_submit/park/unpark).

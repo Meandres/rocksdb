@@ -91,6 +91,10 @@ void rocksdb_ricochet_enable_uintr() {
   if (mgr) mgr->EnableUINTR();
 }
 
+void rocksdb_ricochet_prefault_stack() {
+  ricochet::region_prefault_thread_stack();
+}
+
 void rocksdb_ricochet_set_precise(int enabled) {
   ricochet::precise_timing = (enabled != 0);
 }
